@@ -208,54 +208,56 @@ class WPCF7_FormTagsManager {
 			$tags = $this->scanned_tags;
 		}
 
-		if ( empty( $tags ) ) {
-			return array();
-		}
-
 		$cond = wp_parse_args( $cond, array(
 			'type' => array(),
+			'basetype' => array(),
 			'name' => array(),
-			'feature' => '',
+			'feature' => array(),
 		) );
 
-		$type = array_filter( (array) $cond['type'] );
-		$name = array_filter( (array) $cond['name'] );
-		$feature = is_string( $cond['feature'] ) ? trim( $cond['feature'] ) : '';
+		$cond = array_map( function ( $c ) {
+			return array_filter( array_map( 'trim', (array) $c ) );
+		}, $cond );
 
-		if ( '!' == substr( $feature, 0, 1 ) ) {
-			$feature_negative = true;
-			$feature = trim( substr( $feature, 1 ) );
-		} else {
-			$feature_negative = false;
-		}
+		$tags = array_filter(
+			(array) $tags,
+			function ( $tag ) use ( $cond ) {
+				$tag = new WPCF7_FormTag( $tag );
 
-		$output = array();
-
-		foreach ( $tags as $tag ) {
-			$tag = new WPCF7_FormTag( $tag );
-
-			if ( $type and ! in_array( $tag->type, $type, true ) ) {
-				continue;
-			}
-
-			if ( $name and ! in_array( $tag->name, $name, true ) ) {
-				continue;
-			}
-
-			if ( $feature ) {
-				if ( ! $this->tag_type_supports( $tag->type, $feature )
-				and ! $feature_negative ) {
-					continue;
-				} elseif ( $this->tag_type_supports( $tag->type, $feature )
-				and $feature_negative ) {
-					continue;
+				if ( $cond['type']
+				and ! in_array( $tag->type, $cond['type'], true ) ) {
+					return false;
 				}
+
+				if ( $cond['basetype']
+				and ! in_array( $tag->basetype, $cond['basetype'], true ) ) {
+					return false;
+				}
+
+				if ( $cond['name']
+				and ! in_array( $tag->name, $cond['name'], true ) ) {
+					return false;
+				}
+
+				foreach ( $cond['feature'] as $feature ) {
+					if ( '!' === substr( $feature, 0, 1 ) ) { // Negation
+						$feature = trim( substr( $feature, 1 ) );
+
+						if ( $this->tag_type_supports( $tag->type, $feature ) ) {
+							return false;
+						}
+					} else {
+						if ( ! $this->tag_type_supports( $tag->type, $feature ) ) {
+							return false;
+						}
+					}
+				}
+
+				return true;
 			}
+		);
 
-			$output[] = $tag;
-		}
-
-		return $output;
+		return array_values( $tags );
 	}
 
 	private function tag_regex() {
